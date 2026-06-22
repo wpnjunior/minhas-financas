@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fin-cache-v1';
+const CACHE_NAME = 'fin-cache-v2';
 const PRECACHE = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -29,8 +29,14 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.hostname === 'api.anthropic.com') return;
 
-  // Cache-first com fallback pra rede
-  event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
-  );
+  // Navegação/HTML: rede primeiro (pega versão nova quando online), cache só offline.
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    event.respondWith(
+      fetch(request).then((r) => { const cp = r.clone(); caches.open(CACHE_NAME).then((c) => c.put(request, cp)); return r; })
+        .catch(() => caches.match(request).then((c) => c || caches.match('./index.html')))
+    );
+    return;
+  }
+  // Resto (manifest, ícone): cache primeiro.
+  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
 });
