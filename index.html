@@ -1612,10 +1612,12 @@ async function agSubmit(){
   const btn=document.getElementById('agBtn'); btn.disabled=true; btn.textContent='…';
   try{
     if(agMode==='signup'){
-      const { data, error } = await supa.auth.signUp({ email, password:pass, options:{ data:{ nome } } });
+      const resp = await fetch(SB_URL+'/functions/v1/signup',{method:'POST',headers:{'content-type':'application/json','apikey':SB_KEY},body:JSON.stringify({email,password:pass,nome})});
+      const out = await resp.json();
+      if(out.error) throw new Error(out.error);
+      const { data, error } = await supa.auth.signInWithPassword({ email, password:pass });
       if(error) throw error;
-      if(data.session){ currentUser=data.session.user; await bootApp(); }
-      else { msg.style.color='#34d399'; msg.textContent='Conta criada! Confirme pelo e-mail e depois entre.'; agSetMode('login'); }
+      currentUser=data.session.user; await bootApp();
     } else {
       const { data, error } = await supa.auth.signInWithPassword({ email, password:pass });
       if(error) throw error;
