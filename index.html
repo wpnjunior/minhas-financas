@@ -490,6 +490,7 @@ function sanitize(){
   if(!Array.isArray(s.dividas)) s.dividas = [];
   if(!Array.isArray(s.metas)) s.metas = [];
   if(!Array.isArray(s.plantoes)) s.plantoes = [];
+  if(!Array.isArray(s.regras)) s.regras = [];
   // garante números
   s.fixos.forEach(f=>{ f.valor=num(f.valor); f.ativo = f.ativo!==false; });
   s.lancamentos.forEach(l=>{ l.valor=num(l.valor); });
@@ -840,13 +841,14 @@ function renderLancamentos(){
     <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Banco</th><th class="num">Valor</th><th></th></tr></thead>
     <tbody>${rows.map(l=>{
       const c=catById(l.categoria);
-      return `<tr>
+      return `<tr data-lanc-id="${l.id}" title="Botão direito (ou 🏷️) pra reclassificar / perguntar à IA">
         <td class="small">${(l.data||"").split("-").reverse().join("/")}</td>
         <td>${esc(l.descricao||"—")}</td>
         <td><span class="dot" style="background:${c.cor};display:inline-block;margin-right:6px"></span>${esc(c.nome)}</td>
         <td class="small">${esc(l.banco||'—')}</td>
         <td class="num ${l.tipo==='entrada'?'pos':'neg'}">${l.tipo==='entrada'?'+':'−'} ${fmtBRL(l.valor)}</td>
         <td class="right" style="white-space:nowrap">
+          <button class="icon-btn" data-reclass-lanc="${l.id}" aria-label="Mudar categoria" title="Mudar categoria / perguntar à IA">🏷️</button>
           <button class="icon-btn" data-edit-lanc="${l.id}" aria-label="Editar lançamento" title="Editar">✏️</button>
           <button class="icon-btn" data-del-lanc="${l.id}" aria-label="Excluir lançamento" title="Excluir">🗑️</button>
         </td></tr>`;
@@ -1235,10 +1237,11 @@ $("#addCat").onclick=()=>formCategoria();
 
 // delegação geral (editar/excluir)
 document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-edit-lanc],[data-del-lanc],[data-edit-fixo],[data-del-fixo],[data-toggle-fixo],[data-edit-divida],[data-del-divida],[data-pay-divida],[data-edit-meta],[data-del-meta],[data-add-guardar],[data-del-cat],[data-quick-plantao],[data-edit-plantao],[data-del-plantao],[data-toggle-receb]");
+  const t = e.target.closest("[data-reclass-lanc],[data-edit-lanc],[data-del-lanc],[data-edit-fixo],[data-del-fixo],[data-toggle-fixo],[data-edit-divida],[data-del-divida],[data-pay-divida],[data-edit-meta],[data-del-meta],[data-add-guardar],[data-del-cat],[data-quick-plantao],[data-edit-plantao],[data-del-plantao],[data-toggle-receb]");
   if(!t) return;
   const d=t.dataset;
-  if(d.editLanc) formLancamento(state.lancamentos.find(x=>x.id===d.editLanc));
+  if(d.reclassLanc){ const r=t.getBoundingClientRect(); showCatMenu(r.right-230, r.bottom+4, d.reclassLanc); }
+  else if(d.editLanc) formLancamento(state.lancamentos.find(x=>x.id===d.editLanc));
   else if(d.delLanc){ if(confirm("Excluir este lançamento?")){ state.lancamentos=state.lancamentos.filter(x=>x.id!==d.delLanc); save(); renderAll(); } }
   else if(d.editFixo) formFixo(state.fixos.find(x=>x.id===d.editFixo));
   else if(d.delFixo){ if(confirm("Excluir este item fixo?")){ state.fixos=state.fixos.filter(x=>x.id!==d.delFixo); save(); renderAll(); } }
@@ -1494,6 +1497,7 @@ const EX_RULES=[
 ];
 function classifyTxn(desc, direcao){
   const d = desc || '';
+  if(Array.isArray(state.regras)&&state.regras.length){ var __k=normRegra(d); if(__k){ var __h=state.regras.find(function(r){return r.match===__k;}); if(__h) return {cat:__h.categoria}; } }
   if(/RENTAB\.?INVEST|REND PAGO APLIC|RENDIMENTO|EST ITAU SEG|ESTORNO/i.test(d)) return {exclude:true, motivo:'rendimento/estorno'};
   if(direcao==='entrada'){
     return /SALARIO|PROVENTO|VENCIMENTO/i.test(d) ? {cat:'salario'} : {cat:'outras_receitas'};
@@ -1551,9 +1555,11 @@ function exRenderPreview(excluded,dups){
   const ent=exPending.filter(l=>l.tipo==='entrada'), sai=exPending.filter(l=>l.tipo==='saida');
   const sum=a=>a.reduce((s,x)=>s+x.valor,0);
   $("#exStatus").textContent='';
+  const incertos=exPending.filter(l=>l.categoria==='outros').length;
   $("#exSummary").innerHTML='<div class="small">A adicionar: <b>'+exPending.length+'</b> lançamentos ('+ent.length+' entradas '+fmtBRL(sum(ent))+' · '+sai.length+' saídas '+fmtBRL(sum(sai))+'). '+
-    'Excluídos (transferências entre suas contas / passthrough): <b>'+excluded.length+'</b>. Já existiam, ignorados: <b>'+dups.length+'</b>.</div>';
-  const rows=exPending.slice().sort((a,b)=>a.data<b.data?-1:1).map(l=>'<tr><td class="small">'+esc(l.data)+'</td><td class="small">'+esc(l.banco)+'</td><td class="small">'+esc(catById(l.categoria).nome)+'</td><td class="small">'+esc(l.descricao)+'</td><td class="num '+(l.tipo==='entrada'?'pos':'neg')+'">'+(l.tipo==='entrada'?'+':'−')+' '+fmtBRL(l.valor)+'</td></tr>').join('');
+    'Excluídos (transferências/passthrough): <b>'+excluded.length+'</b>. Já existiam, ignorados: <b>'+dups.length+'</b>.'+
+    (incertos?' <span style="color:#fbbf24">⚠️ <b>'+incertos+'</b> em amarelo — categoria incerta, confira antes de gravar (botão direito muda e ensina).</span>':'')+'</div>';
+  const rows=exPending.slice().sort((a,b)=>a.data<b.data?-1:1).map(function(l){ var inc=l.categoria==='outros'; return '<tr'+(inc?' style="background:rgba(251,191,36,.13)"':'')+'><td class="small">'+esc(l.data)+'</td><td class="small">'+esc(l.banco)+'</td><td class="small">'+(inc?'⚠️ ':'')+esc(catById(l.categoria).nome)+'</td><td class="small">'+esc(l.descricao)+'</td><td class="num '+(l.tipo==='entrada'?'pos':'neg')+'">'+(l.tipo==='entrada'?'+':'−')+' '+fmtBRL(l.valor)+'</td></tr>';}).join('');
   $("#exPreview").innerHTML=exPending.length?'<table><thead><tr><th>Data</th><th>Banco</th><th>Categoria</th><th>Descrição</th><th class="num">Valor</th></tr></thead><tbody>'+rows+'</tbody></table>':'<div class="empty">Nada novo pra adicionar (tudo já existia ou foi excluído).</div>';
   $("#exPreviewCard").style.display='';
 }
@@ -1571,6 +1577,31 @@ $("#exCancel").onclick=()=>{ exPending=[]; $("#exPreviewCard").style.display='no
 /* =========================================================
    INÍCIO
 ========================================================= */
+/* ---------- RECLASSIFICAR (botão direito / 🏷️) + APRENDER ---------- */
+function normRegra(d){ return String(d||'').replace(/^💳\S+ · /,'').replace(/\d+/g,'').replace(/[\/\-\*.]/g,' ').replace(/\b(PIX|QR|CODE|ENVIADO|RECEBIDO|ESTATICO|DINAMICO|COMPRA|DEBITO|VISTA|TRANSF|DES|REM|PAGTO|ELETRON|COBRANCA)\b/gi,'').replace(/\s+/g,' ').trim().toUpperCase().slice(0,24); }
+function aprenderRegra(desc,cat){ if(!Array.isArray(state.regras)) state.regras=[]; const k=normRegra(desc); if(!k||k.length<3) return; const ex=state.regras.find(r=>r.match===k); if(ex) ex.categoria=cat; else state.regras.push({match:k,categoria:cat}); }
+function toast(msg){ var t=document.createElement('div'); t.textContent=msg; t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0d9488;color:#fff;padding:10px 16px;border-radius:10px;z-index:99999;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.4)'; document.body.appendChild(t); setTimeout(function(){t.remove();},2600); }
+function reclassificar(lancId,newCat){ const l=state.lancamentos.find(x=>x.id===lancId); if(!l||l.categoria===newCat) return; l.categoria=newCat; aprenderRegra(l.descricao,newCat); save(); renderAll(); toast('✓ Movido para "'+catById(newCat).nome+'" · regra aprendida (vale na próxima importação)'); }
+function closeCatMenu(){ var m=document.getElementById('catMenu'); if(m) m.remove(); }
+function perguntarSobre(lancId){ const l=state.lancamentos.find(x=>x.id===lancId); if(!l) return; closeCatMenu(); var b=document.querySelector('button[data-view="ia"]'); if(b) b.click(); if(typeof iaPerguntar==='function') iaPerguntar('Sobre este lançamento — "'+(l.descricao||'')+'" · '+fmtBRL(l.valor)+' · '+(l.data||'')+' · categoria atual: '+catById(l.categoria).nome+'. O que é esse gasto e em qual categoria ele deveria ficar?'); }
+function showCatMenu(x,y,lancId){
+  closeCatMenu(); const l=state.lancamentos.find(z=>z.id===lancId); if(!l) return;
+  if(!document.getElementById('catMenuStyle')){ var st=document.createElement('style'); st.id='catMenuStyle'; st.textContent='#catMenu .catopt:hover{background:var(--accent,#38bdf8);color:#06283a}'; document.head.appendChild(st); }
+  var cats=state.categorias.filter(c=>c.tipo==='saida');
+  var m=document.createElement('div'); m.id='catMenu';
+  m.style.cssText='position:fixed;z-index:99998;background:var(--card2,#273449);border:1px solid var(--line,#334155);border-radius:10px;padding:6px;max-height:62vh;overflow:auto;box-shadow:0 10px 34px rgba(0,0,0,.55);min-width:230px;font-size:14px;color:var(--txt,#e2e8f0)';
+  m.innerHTML='<div style="padding:6px 9px;color:var(--muted,#94a3b8);font-size:12px;line-height:1.45">'+esc((l.descricao||'').slice(0,40))+'<br><b style="color:var(--txt,#e2e8f0)">'+fmtBRL(l.valor)+'</b></div>'
+    +'<div class="catopt" data-ia="1" style="padding:8px 10px;border-radius:7px;cursor:pointer;border-top:1px solid var(--line,#334155);border-bottom:1px solid var(--line,#334155)">🤖 Perguntar à IA sobre este</div>'
+    +'<div style="padding:6px 9px;color:var(--muted,#94a3b8);font-size:12px">🏷️ Mudar categoria para:</div>'
+    +cats.map(function(c){return '<div class="catopt" data-cat="'+c.id+'" style="padding:7px 10px;border-radius:7px;cursor:pointer;'+(c.id===l.categoria?'opacity:.45':'')+'"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:'+c.cor+';margin-right:7px"></span>'+esc(c.nome)+(c.id===l.categoria?' ✓':'')+'</div>';}).join('');
+  document.body.appendChild(m);
+  m.addEventListener('click', function(ev){ var o=ev.target.closest('.catopt'); if(!o) return; if(o.dataset.ia){ perguntarSobre(lancId); return; } reclassificar(lancId,o.dataset.cat); closeCatMenu(); });
+  m.style.left=Math.max(8,Math.min(x, innerWidth-m.offsetWidth-8))+'px';
+  m.style.top=Math.max(8,Math.min(y, innerHeight-m.offsetHeight-8))+'px';
+}
+document.addEventListener('contextmenu', function(e){ var tr=e.target.closest('tr[data-lanc-id]'); if(!tr) return; e.preventDefault(); showCatMenu(e.clientX,e.clientY,tr.dataset.lancId); });
+document.addEventListener('click', function(e){ if(e.target.closest('#catMenu')||e.target.closest('[data-reclass-lanc]')) return; closeCatMenu(); });
+
 load().then(renderAll).catch(e=>{ console.error(e); state=defaultState(); renderAll(); });
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
 </script>
