@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Minhas Finanças</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0f172a">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -114,6 +115,21 @@
 </style>
 </head>
 <body>
+<div id="authGate" style="position:fixed;inset:0;z-index:100000;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:380px;background:#1e293b;border:1px solid #334155;border-radius:16px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,.5)">
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,#38bdf8,#6366f1);display:inline-flex;align-items:center;justify-content:center;font-size:28px">💰</div>
+      <h2 style="margin:10px 0 2px;color:#e2e8f0;font-size:20px">Minhas Finanças</h2>
+      <p id="agSub" style="margin:0;color:#94a3b8;font-size:13px">Entre na sua conta</p>
+    </div>
+    <input id="agN" placeholder="Seu nome" style="display:none;width:100%;margin-bottom:8px;padding:11px 12px;border-radius:9px;border:1px solid #334155;background:#273449;color:#e2e8f0;font-size:15px;box-sizing:border-box">
+    <input id="agEmail" type="email" autocomplete="email" placeholder="E-mail" style="width:100%;margin-bottom:8px;padding:11px 12px;border-radius:9px;border:1px solid #334155;background:#273449;color:#e2e8f0;font-size:15px;box-sizing:border-box">
+    <input id="agPass" type="password" autocomplete="current-password" placeholder="Senha" style="width:100%;margin-bottom:12px;padding:11px 12px;border-radius:9px;border:1px solid #334155;background:#273449;color:#e2e8f0;font-size:15px;box-sizing:border-box">
+    <button id="agBtn" style="width:100%;padding:11px;border-radius:9px;border:0;background:linear-gradient(135deg,#38bdf8,#6366f1);color:#06283a;font-weight:700;font-size:15px;cursor:pointer">Entrar</button>
+    <div id="agMsg" style="color:#f87171;font-size:13px;margin-top:10px;min-height:18px;text-align:center"></div>
+    <div style="text-align:center;margin-top:8px;font-size:13px"><a id="agToggle" href="#" style="color:#38bdf8;text-decoration:none">Primeiro acesso? Criar conta</a></div>
+  </div>
+</div>
 <div class="wrap">
   <header class="top">
     <div class="brand">
@@ -154,6 +170,8 @@
     <button data-view="ia">🤖 Assistente</button>
     <button data-view="extratos">📥 Extratos</button>
     <button data-view="dados">⚙️ Dados</button>
+    <button data-view="admin" id="tabAdmin" style="display:none">👑 Admin</button>
+    <button onclick="logout()" title="Sair da conta" style="margin-left:auto">🚪 Sair</button>
   </nav>
 
   <!-- ====================== PAINEL ====================== -->
@@ -278,17 +296,8 @@
   <!-- ====================== ASSISTENTE IA ====================== -->
   <section class="view" id="view-ia">
     <div class="card mb" id="iaSetup">
-      <h3>🤖 Assistente — configuração</h3>
-      <p class="small muted">Cole sua chave da API da Anthropic. Ela fica guardada <b>só neste navegador</b> (não vai pro arquivo nem pra internet). Pegue em <b>console.anthropic.com</b> → API Keys.</p>
-      <div class="formgrid">
-        <label class="field"><span>Chave da API (sk-ant-…)</span><input type="password" id="iaKey" placeholder="sk-ant-..."></label>
-        <label class="field"><span>Modelo</span><select id="iaModel">
-          <option value="claude-haiku-4-5-20251001">Haiku 4.5 — rápido e barato</option>
-          <option value="claude-sonnet-4-6">Sonnet 4.6 — mais esperto (recomendado)</option>
-          <option value="claude-opus-4-8">Opus 4.8 — o mais forte</option>
-        </select></label>
-      </div>
-      <button class="btn" id="iaSave">Salvar chave</button>
+      <h3>🤖 Assistente</h3>
+      <p class="small muted">A IA roda no servidor, com segurança. Suas conversas ficam <b>salvas no seu histórico</b> 🔒. Pergunte sobre seus gastos, peça cortes, busque por nome.</p>
     </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -326,6 +335,24 @@
   </section>
 
   <!-- ====================== DADOS ====================== -->
+  <section class="view" id="view-admin">
+    <div class="card mb">
+      <h3>👑 Painel do Admin</h3>
+      <p class="small muted">Crie contas e entregue o login (e-mail + senha) pras pessoas. Cada uma vê só os próprios dados.</p>
+      <div class="formgrid">
+        <label class="field"><span>Nome</span><input id="adNome" placeholder="ex: Maria"></label>
+        <label class="field"><span>E-mail</span><input id="adEmail" type="email" placeholder="email@exemplo.com"></label>
+        <label class="field"><span>Senha provisória</span><input id="adPass" placeholder="mín. 6 caracteres"></label>
+      </div>
+      <button class="btn" id="adCreate">Criar conta</button>
+      <div id="adMsg" class="small" style="margin-top:10px;min-height:18px"></div>
+    </div>
+    <div class="card">
+      <h3>Contas</h3>
+      <div id="adList"></div>
+    </div>
+  </section>
+
   <section class="view" id="view-dados">
     <div class="row2b">
       <div class="card">
@@ -434,53 +461,19 @@ function nowISO(){ return new Date().toISOString().slice(0,10); }
    ARMAZENAMENTO — IndexedDB (capacidade em GB), no lugar do
    localStorage (~5MB, que estourava). Migra dados antigos sozinho.
    ========================================================= */
-const DB_NAME = "fin_db", DB_STORE = "estado", DB_KEY = "fin_v1";
-let _dbPromise = null;
-function openDB(){
-  if(_dbPromise) return _dbPromise;
-  _dbPromise = new Promise((resolve,reject)=>{
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = ()=>{ const db=req.result; if(!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE); };
-    req.onsuccess = ()=>resolve(req.result);
-    req.onerror   = ()=>reject(req.error);
-  });
-  return _dbPromise;
-}
-function idbGet(key){
-  return openDB().then(db=>new Promise((resolve,reject)=>{
-    const r=db.transaction(DB_STORE,"readonly").objectStore(DB_STORE).get(key);
-    r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error);
-  }));
-}
-function idbSet(key,val){
-  return openDB().then(db=>new Promise((resolve,reject)=>{
-    const tx=db.transaction(DB_STORE,"readwrite");
-    tx.objectStore(DB_STORE).put(val,key);
-    tx.oncomplete=()=>resolve(true); tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error);
-  }));
-}
+/* ===== SUPABASE (banco + login) ===== */
+const SB_URL = "https://kehgbwdbgsiepcdbmhiz.supabase.co";
+const SB_KEY = "sb_publishable_BQ0-xrDLIDYZ1qP8rwGCuQ_SxON3Xcr";
+const supa = window.supabase.createClient(SB_URL, SB_KEY);
+let currentUser = null, profile = null;
 
 async function load(){
-  // 1) tenta IndexedDB
   try{
-    const data = await idbGet(DB_KEY);
-    if(data){ state = data; sanitize(); return; }
-  }catch(e){ console.warn("IndexedDB indisponível:",e); }
-  // 2) migração: dados antigos no localStorage (leitura não falha mesmo lotado)
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      state = JSON.parse(raw); sanitize();
-      try{
-        await idbSet(DB_KEY, state);                       // copia pro IndexedDB
-        try{ localStorage.removeItem(STORAGE_KEY); }catch(_){}  // libera o baú de ~5MB
-      }catch(e){ console.warn("Não consegui migrar pro IndexedDB:",e); }
-      return;                                              // dados já estão em memória
-    }
-  }catch(e){ console.warn("Falha ao ler dados antigos:",e); }
-  // 3) primeiro uso: começa vazio
-  state = defaultState();
-  save();
+    const { data, error } = await supa.from('app_state').select('state').eq('user_id', currentUser.id).maybeSingle();
+    if(error) throw error;
+    if(data && data.state && Array.isArray(data.state.lancamentos)){ state = data.state; sanitize(); return; }
+  }catch(e){ console.warn('load:', e && e.message); }
+  state = defaultState(); sanitize(); saveNow();
 }
 function sanitize(){
   const s = state;
@@ -503,11 +496,12 @@ function sanitize(){
   s.metas.forEach(m=>{ m.valorAlvo=num(m.valorAlvo); m.valorAtual=num(m.valorAtual); });
   s.plantoes.forEach(p=>{ p.valor=num(p.valor); p.recebido=!!p.recebido; });
 }
-function save(){
-  idbSet(DB_KEY, state).catch(e=>{
-    console.error("Falha ao salvar:",e);
-    alert("Não consegui salvar agora. Faça um backup (aba Dados → Baixar backup) por garantia.");
-  });
+let _saveTimer=null;
+function save(){ if(!currentUser) return; clearTimeout(_saveTimer); _saveTimer=setTimeout(saveNow,700); }
+async function saveNow(){
+  if(!currentUser) return;
+  try{ await supa.from('app_state').upsert({ user_id: currentUser.id, state: state, updated_at: new Date().toISOString() }); }
+  catch(e){ console.error('save:', e && e.message); }
 }
 
 /* =========================================================
@@ -670,6 +664,7 @@ function renderAll(){
   if(currentView==="metas") renderMetas();
   if(currentView==="plantoes") renderPlantoes();
   if(currentView==="ia") renderAssistente();
+  if(currentView==="admin") renderAdmin();
   if(currentView==="dados") renderDados();
 }
 
@@ -1410,16 +1405,21 @@ $("#wipe").onclick=()=>{
 };
 
 /* ---------- ASSISTENTE IA (Claude / API Anthropic) ---------- */
-let iaMsgs=[], iaBusy=false;
+let iaMsgs=[], iaBusy=false, iaLoaded=false;
 const IA_CHIPS=["Resuma meus gastos","Quanto pago de dívida por mês?","Meus 5 maiores gastos","Onde dá pra cortar?","Gasto por categoria"];
 function mdLite(t){
   let h=esc(t);
   h=h.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/^#{1,6}\s*(.+)$/gm,'<b>$1</b>').replace(/^\s*[-*]\s+/gm,'• ');
   return h.replace(/\n/g,'<br>');
 }
+async function iaLoadHistory(){
+  try{
+    const { data } = await supa.from('ai_messages').select('role,content').eq('user_id',currentUser.id).order('id',{ascending:true}).limit(60);
+    iaMsgs=(data||[]).map(m=>({role: m.role==='assistant'?'ia':'user', text:m.content}));
+  }catch(_){}
+}
 function renderAssistente(){
-  if($("#iaKey")) $("#iaKey").value = state.apiKey||'';
-  if(state.aiModel && $("#iaModel")) $("#iaModel").value = state.aiModel;
+  if(!iaLoaded && currentUser){ iaLoaded=true; iaLoadHistory().then(()=>renderAssistente()); }
   let html = iaMsgs.map(m=>{
     const cls = m.role==='user'?'okb':m.role==='erro'?'bad':'warnb';
     const ic  = m.role==='user'?'🧔🏻':m.role==='erro'?'⚠️':'🤖';
@@ -1427,7 +1427,7 @@ function renderAssistente(){
     return `<div class="alert ${cls}"><span class="ic">${ic}</span><div>${body}</div></div>`;
   }).join('');
   if(iaBusy) html+=`<div class="alert warnb"><span class="ic">🤖</span><div>⏳ pensando…</div></div>`;
-  if(!iaMsgs.length && !iaBusy) html=`<div class="empty">Faça uma pergunta sobre suas contas.<br><span class="small">${state.apiKey?'':'(configure sua chave da API acima primeiro)'}</span></div>`;
+  if(!iaMsgs.length && !iaBusy) html=`<div class="empty">Faça uma pergunta sobre suas contas.<br><span class="small">As conversas ficam salvas no seu histórico 🔒</span></div>`;
   $("#iaChat").innerHTML=html; $("#iaChat").scrollTop=$("#iaChat").scrollHeight;
   if($("#iaChips")) $("#iaChips").innerHTML=IA_CHIPS.map((c,i)=>`<button type="button" class="btn" data-chip="${i}" style="padding:4px 10px;font-size:12.5px">${esc(c)}</button>`).join('');
   if($("#iaSend")){ $("#iaSend").disabled=iaBusy; $("#iaSend").textContent=iaBusy?'…':'Perguntar'; }
@@ -1449,33 +1449,23 @@ function iaContext(){
 }
 async function iaPerguntar(pergunta){
   const q=(pergunta||$("#iaInput").value||'').trim(); if(!q||iaBusy) return;
-  if(!state.apiKey){ alert("Cole sua chave da API no campo acima e clique 'Salvar chave'."); return; }
   $("#iaInput").value=''; iaMsgs.push({role:'user',text:q}); iaBusy=true; renderAssistente();
-  const conv=iaMsgs.filter(m=>m.role==='user'||m.role==='ia').map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'content-type':'application/json','x-api-key':state.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:state.aiModel||'claude-sonnet-4-6',max_tokens:1500,
-        system:[
-          {type:'text',text:"Você é o assistente financeiro pessoal do usuário. Você tem os lançamentos do usuário (todas as contas/bancos/cartões). Responda em português, direto e prático. Use SOMENTE os dados fornecidos abaixo; nunca invente números. Valores sempre em R$. Você PODE buscar por nome de pessoa dentro das descrições e somar — ex: 'total que mandei pra fulano', 'quanto recebi de fulano' — varrendo entradas/saídas. Quando buscar por nome, considere variações (maiúsculas, nome parcial). Pode sugerir cortes e ordem de quitação. Use **negrito** e listas com '- '."},
-          {type:'text',text:iaContext(),cache_control:{type:'ephemeral'}}
-        ],
-        messages:conv})});
+    const { data: sess } = await supa.auth.getSession();
+    const token = sess && sess.session ? sess.session.access_token : '';
+    const resp=await fetch(SB_URL+'/functions/v1/ai-chat',{method:'POST',
+      headers:{'content-type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({ question:q, context:iaContext(), area:'app', model:'claude-sonnet-4-6' })});
     const data=await resp.json();
-    if(!resp.ok){
-      const msg=(data&&data.error&&data.error.message)||('Erro HTTP '+resp.status);
-      iaMsgs.push({role:'erro',text: resp.status===401?'Chave inválida ou sem crédito. Confira a chave e o saldo em console.anthropic.com.' : (resp.status===429||resp.status===529)?'API ocupada/limite atingido — tente de novo em alguns segundos.' : msg });
-    } else {
-      iaMsgs.push({role:'ia',text:(data.content||[]).map(c=>c.text||'').join('')||'(sem resposta)'});
-    }
-  }catch(e){ iaMsgs.push({role:'erro',text:'Falha de conexão: '+e.message+' (verifique a internet)'}); }
+    if(data.error) iaMsgs.push({role:'erro',text:data.error});
+    else iaMsgs.push({role:'ia',text:data.answer||'(sem resposta)'});
+  }catch(e){ iaMsgs.push({role:'erro',text:'Falha de conexão: '+(e&&e.message)}); }
   iaBusy=false; renderAssistente();
 }
-$("#iaSave").onclick=()=>{ state.apiKey=$("#iaKey").value.trim(); state.aiModel=$("#iaModel").value; save(); renderAssistente(); alert("Chave salva neste navegador 🔒"); };
 $("#iaSend").onclick=()=>iaPerguntar();
 $("#iaInput").addEventListener("keydown",e=>{ if(e.key==='Enter') iaPerguntar(); });
-$("#iaClear").onclick=()=>{ iaMsgs=[]; renderAssistente(); };
-$("#iaChips").addEventListener("click",e=>{ const b=e.target.closest("button[data-chip]"); if(b) iaPerguntar(IA_CHIPS[+b.dataset.chip]); });
+if($("#iaClear")) $("#iaClear").onclick=()=>{ iaMsgs=[]; renderAssistente(); };
+if($("#iaChips")) $("#iaChips").addEventListener("click",e=>{ const b=e.target.closest("button[data-chip]"); if(b) iaPerguntar(IA_CHIPS[+b.dataset.chip]); });
 
 /* ---------- IMPORTAR EXTRATO: PDF -> Claude -> classifica -> prévia -> grava ---------- */
 let exPending=[];
@@ -1510,30 +1500,20 @@ function classifyTxn(desc, direcao){
 function exFileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=()=>rej(r.error); r.readAsDataURL(file); }); }
 function exKey(data,valor,desc){ return data+'|'+Number(valor).toFixed(2)+'|'+String(desc||'').slice(0,28).toUpperCase().replace(/\s+/g,' '); }
 async function exProcessar(){
-  if(!state.apiKey){ alert("Configure sua chave da API na aba 🤖 Assistente primeiro."); return; }
   const files=Array.from(($("#exFile").files)||[]); if(!files.length){ alert("Escolha o(s) PDF(s) do extrato."); return; }
   const banco=$("#exBanco").value;
   exPending=[]; const excluded=[], dups=[];
   const existing=new Set(state.lancamentos.map(l=>exKey(l.data,l.valor,l.descricao)));
   $("#exProcess").disabled=true;
+  const { data: exSess } = await supa.auth.getSession(); const exToken = exSess&&exSess.session?exSess.session.access_token:'';
   for(let i=0;i<files.length;i++){
     $("#exStatus").textContent='Lendo '+files[i].name+' ('+(i+1)+'/'+files.length+')… pode levar alguns segundos.';
     try{
       const b64=await exFileToB64(files[i]);
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'content-type':'application/json','x-api-key':state.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:16000,
-          system:"Você extrai transações de extratos bancários brasileiros. Responda APENAS com um array JSON válido, nada antes nem depois.",
-          messages:[{role:'user',content:[
-            {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
-            {type:'text',text:"Extraia TODAS as linhas de transação deste extrato. Para cada linha: data (formato YYYY-MM-DD), o histórico/descrição completo, o valor (número positivo, sem R$ nem ponto de milhar), e se foi crédito/entrada ou débito/saída (olhe as colunas Crédito e Débito). NÃO inclua linhas de saldo. Responda SÓ um array JSON compacto neste formato: [{\"d\":\"2026-01-05\",\"h\":\"PIX ENVIADO FULANO\",\"v\":123.45,\"t\":\"s\"}] onde t=\"e\" para entrada/crédito e t=\"s\" para saída/débito. Se não houver transações, responda []."}
-          ]}]})});
+      const resp=await fetch(SB_URL+'/functions/v1/ai-extract',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+exToken,'apikey':SB_KEY},body:JSON.stringify({pdf_base64:b64})});
       const data=await resp.json();
-      if(!resp.ok){ $("#exStatus").textContent='Erro da API: '+((data&&data.error&&data.error.message)||('HTTP '+resp.status)); $("#exProcess").disabled=false; return; }
-      const txt=(data.content||[]).map(c=>c.text||'').join('');
-      let arr=null;
-      try{ let t=txt.trim(); const a=t.indexOf('['), b=t.lastIndexOf(']'); if(a>=0&&b>a) t=t.slice(a,b+1); arr=JSON.parse(t); }
-      catch(_){ $("#exStatus").textContent='Não consegui ler as transações de '+files[i].name+' (resposta fora do formato). Tente um extrato menor ou de período mais curto.'; $("#exProcess").disabled=false; return; }
+      if(data.error){ $("#exStatus").textContent='Erro: '+data.error; $("#exProcess").disabled=false; return; }
+      const arr=data.transacoes||[];
       for(const r of (arr||[])){
         const dt=r.d||r.data, valor=Math.abs(num(r.v!=null?r.v:r.valor));
         const direcao=(r.t||r.direcao||'s').toString().toLowerCase().charAt(0)==='e'?'entrada':'saida';
@@ -1602,7 +1582,84 @@ function showCatMenu(x,y,lancId){
 document.addEventListener('contextmenu', function(e){ var tr=e.target.closest('tr[data-lanc-id]'); if(!tr) return; e.preventDefault(); showCatMenu(e.clientX,e.clientY,tr.dataset.lancId); });
 document.addEventListener('click', function(e){ if(e.target.closest('#catMenu')||e.target.closest('[data-reclass-lanc]')) return; closeCatMenu(); });
 
-load().then(renderAll).catch(e=>{ console.error(e); state=defaultState(); renderAll(); });
+/* ===== LOGIN / CADASTRO ===== */
+async function bootApp(){
+  try{ const { data:p } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle(); profile=p; }catch(_){}
+  document.getElementById('authGate').style.display='none';
+  try{ await load(); }catch(e){ console.error(e); state=defaultState(); sanitize(); }
+  setupAdminUI();
+  renderAll();
+}
+async function checkSession(){
+  try{ const { data } = await supa.auth.getSession(); if(data && data.session){ currentUser=data.session.user; await bootApp(); } }catch(e){ console.warn('sessao:',e&&e.message); }
+}
+let agMode='login';
+function agSetMode(m){
+  agMode=m;
+  document.getElementById('agN').style.display = m==='signup'?'block':'none';
+  document.getElementById('agBtn').textContent = m==='signup'?'Criar conta':'Entrar';
+  document.getElementById('agSub').textContent = m==='signup'?'Crie sua conta':'Entre na sua conta';
+  document.getElementById('agToggle').textContent = m==='signup'?'Já tenho conta — entrar':'Primeiro acesso? Criar conta';
+  document.getElementById('agMsg').textContent='';
+}
+function traduzErro(m){ m=m||'erro'; if(/Invalid login/i.test(m)) return 'E-mail ou senha incorretos.'; if(/already registered/i.test(m)) return 'Esse e-mail já tem conta — é só entrar.'; if(/not confirmed/i.test(m)) return 'Confirme seu e-mail (link que enviamos) antes de entrar.'; if(/at least 6/i.test(m)) return 'A senha precisa de pelo menos 6 caracteres.'; return m; }
+async function agSubmit(){
+  const email=document.getElementById('agEmail').value.trim().toLowerCase();
+  const pass=document.getElementById('agPass').value;
+  const nome=document.getElementById('agN').value.trim();
+  const msg=document.getElementById('agMsg'); msg.style.color='#f87171'; msg.textContent='';
+  if(!email||pass.length<6){ msg.textContent='Informe e-mail e senha (mín. 6 caracteres).'; return; }
+  const btn=document.getElementById('agBtn'); btn.disabled=true; btn.textContent='…';
+  try{
+    if(agMode==='signup'){
+      const { data, error } = await supa.auth.signUp({ email, password:pass, options:{ data:{ nome } } });
+      if(error) throw error;
+      if(data.session){ currentUser=data.session.user; await bootApp(); }
+      else { msg.style.color='#34d399'; msg.textContent='Conta criada! Confirme pelo e-mail e depois entre.'; agSetMode('login'); }
+    } else {
+      const { data, error } = await supa.auth.signInWithPassword({ email, password:pass });
+      if(error) throw error;
+      currentUser=data.session.user; await bootApp();
+    }
+  }catch(e){ msg.textContent=traduzErro(e && e.message); }
+  btn.disabled=false; btn.textContent = agMode==='signup'?'Criar conta':'Entrar';
+}
+async function logout(){ try{ await supa.auth.signOut(); }catch(_){} location.reload(); }
+/* ===== ADMIN ===== */
+function setupAdminUI(){
+  const isAdmin = profile && profile.role==='admin';
+  if($("#tabAdmin")) $("#tabAdmin").style.display = isAdmin ? '' : 'none';
+}
+async function renderAdmin(){
+  if(!(profile && profile.role==='admin')){ if($("#adList")) $("#adList").innerHTML='<div class="empty">Só o admin vê isto.</div>'; return; }
+  try{
+    const { data } = await supa.from('profiles').select('email,nome,role,created_at').order('created_at',{ascending:true});
+    $("#adList").innerHTML = (data&&data.length)
+      ? '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th></tr></thead><tbody>'+data.map(u=>'<tr><td class="small">'+esc(u.nome||'—')+'</td><td class="small">'+esc(u.email||'')+'</td><td class="small">'+(u.role==='admin'?'👑 admin':'usuário')+'</td></tr>').join('')+'</tbody></table>'
+      : '<div class="empty">Sem contas ainda.</div>';
+  }catch(e){ $("#adList").innerHTML='<div class="small">'+esc((e&&e.message)||'erro')+'</div>'; }
+}
+async function adminCreateUser(){
+  const nome=$("#adNome").value.trim(), email=$("#adEmail").value.trim().toLowerCase(), pass=$("#adPass").value;
+  const msg=$("#adMsg"); msg.style.color='#f87171'; msg.textContent='';
+  if(!email||pass.length<6){ msg.textContent='Informe e-mail e senha (mín. 6 caracteres).'; return; }
+  const btn=$("#adCreate"); btn.disabled=true; btn.textContent='Criando…';
+  try{
+    const { data: sess } = await supa.auth.getSession();
+    const token = sess&&sess.session?sess.session.access_token:'';
+    const resp=await fetch(SB_URL+'/functions/v1/admin-create-user',{method:'POST',headers:{'content-type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},body:JSON.stringify({nome,email,password:pass})});
+    const data=await resp.json();
+    if(data.error){ msg.textContent=data.error; }
+    else { msg.style.color='#34d399'; msg.textContent='✓ Conta criada! Entregue pra pessoa: '+email+' + a senha que você digitou.'; $("#adNome").value='';$("#adEmail").value='';$("#adPass").value=''; renderAdmin(); }
+  }catch(e){ msg.textContent='Falha: '+((e&&e.message)||e); }
+  btn.disabled=false; btn.textContent='Criar conta';
+}
+if($("#adCreate")) $("#adCreate").onclick=adminCreateUser;
+document.getElementById('agToggle').onclick=(e)=>{ e.preventDefault(); agSetMode(agMode==='login'?'signup':'login'); };
+document.getElementById('agBtn').onclick=agSubmit;
+document.getElementById('agPass').addEventListener('keydown',e=>{ if(e.key==='Enter') agSubmit(); });
+
+checkSession();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(function(){}); }
 </script>
 </body>

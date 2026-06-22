@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fin-cache-v2';
+const CACHE_NAME = 'fin-cache-v3';
 const PRECACHE = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
